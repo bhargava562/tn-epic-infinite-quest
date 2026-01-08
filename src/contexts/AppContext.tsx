@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { User, Session } from '@supabase/supabase-js';
 
 type Language = 'en' | 'ta' | 'fr' | 'de';
 type ScreenType = 'onboarding' | 'auth' | 'register' | 'dashboard' | 'lobby' | 'tripPlanning' | 'map' | 'ar' | 'completedTrips';
@@ -49,8 +51,8 @@ interface RegisterData {
 }
 
 interface AppContextType {
-  user: null;
-  session: null;
+  user: User | null;
+  session: Session | null;
   profile: Profile | null;
   isDemo: boolean;
   isLoading: boolean;
@@ -78,209 +80,386 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Demo profile
-const DEMO_PROFILE: Profile = {
-  id: 'demo-bhargava-001',
-  display_name: 'Bhargava',
-  email: 'bhargavaanand2006@gmail.com',
-  avatar_url: '/avatar-explorer.png',
-  level: 5,
-  tokens: 1250,
-  dharma_score: 340,
-  total_trips: 4,
-  total_memories: 12,
-  preferred_language: 'en',
-  created_at: '2025-12-01T00:00:00Z',
-  updated_at: '2025-12-28T00:00:00Z',
-};
-
-// Demo completed trips
-const DEMO_COMPLETED_TRIPS: Trip[] = [
-  {
-    id: 'demo-trip-002',
-    title: 'Madurai Temple Trail',
-    duration: 2,
-    destinations: ['Meenakshi Temple', 'Thirumalai Nayakkar Palace'],
-    currentLevel: 4,
-    totalLevels: 4,
-    startDate: new Date('2025-12-20'),
-    endDate: new Date('2025-12-21'),
-    isCompleted: true,
-    tokensEarned: 180,
-    dharmaEarned: 95,
-    memories: [
-      { id: '1', image: 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=200', location: 'Temple Entrance', timestamp: new Date() },
-      { id: '2', image: 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=200', location: 'Inner Sanctum', timestamp: new Date() },
-    ],
-  },
-  {
-    id: 'demo-trip-003',
-    title: 'Mahabalipuram Discovery',
-    duration: 1,
-    destinations: ['Shore Temple', 'Five Rathas'],
-    currentLevel: 2,
-    totalLevels: 2,
-    startDate: new Date('2025-12-15'),
-    endDate: new Date('2025-12-15'),
-    isCompleted: true,
-    tokensEarned: 120,
-    dharmaEarned: 60,
-    memories: [],
-  },
-  {
-    id: 'demo-trip-004',
-    title: 'Kanyakumari Coastal Quest',
-    duration: 2,
-    destinations: ['Vivekananda Rock', 'Thiruvalluvar Statue'],
-    currentLevel: 3,
-    totalLevels: 3,
-    startDate: new Date('2025-12-10'),
-    endDate: new Date('2025-12-11'),
-    isCompleted: true,
-    tokensEarned: 150,
-    dharmaEarned: 80,
-    memories: [],
-  },
-];
-
-// Demo active trip
-const DEMO_ACTIVE_TRIP: Trip = {
-  id: 'demo-trip-001',
-  title: 'Thanjavur Heritage Journey',
-  duration: 3,
-  destinations: ['Brihadeeswara Temple', 'Art Gallery', 'Palace'],
-  currentLevel: 2,
-  totalLevels: 6,
-  startDate: new Date('2025-12-26'),
-  isCompleted: false,
-  tokensEarned: 45,
-  dharmaEarned: 25,
-  memories: [],
-};
-
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>('en');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('onboarding');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isDemo, setIsDemo] = useState(false);
-  const [isLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [pendingEmail, setPendingEmail] = useState('');
   const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
   const [completedTrips, setCompletedTrips] = useState<Trip[]>([]);
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+
+  // Fetch user profile from database
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return null;
+      }
+      return data as Profile;
+    } catch (err) {
+      console.error('Error in fetchProfile:', err);
+      return null;
+    }
+  };
+
+  // Fetch user trips from database
+  const fetchTrips = async (userId: string) => {
+    try {
+      const { data: tripsData, error } = await supabase
+        .from('trips')
+        .select(`
+          id,
+          title,
+          duration,
+          status,
+          current_level,
+          total_levels,
+          tokens_earned,
+          dharma_earned,
+          start_date,
+          end_date,
+          completed_at
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching trips:', error);
+        return { active: null, completed: [] };
+      }
+
+      const trips: Trip[] = (tripsData || []).map(trip => ({
+        id: trip.id,
+        title: trip.title || 'Trip',
+        duration: trip.duration,
+        destinations: [],
+        currentLevel: trip.current_level || 1,
+        totalLevels: trip.total_levels || 1,
+        startDate: trip.start_date ? new Date(trip.start_date) : new Date(),
+        endDate: trip.end_date ? new Date(trip.end_date) : undefined,
+        isCompleted: trip.status === 'completed',
+        tokensEarned: trip.tokens_earned || 0,
+        dharmaEarned: trip.dharma_earned || 0,
+        memories: [],
+      }));
+
+      const active = trips.find(t => !t.isCompleted) || null;
+      const completed = trips.filter(t => t.isCompleted);
+
+      return { active, completed };
+    } catch (err) {
+      console.error('Error in fetchTrips:', err);
+      return { active: null, completed: [] };
+    }
+  };
+
+  // Initialize auth state
+  useEffect(() => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, currentSession) => {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        setIsAuthenticated(!!currentSession?.user);
+        
+        if (currentSession?.user) {
+          // Defer database calls with setTimeout to prevent deadlock
+          setTimeout(() => {
+            fetchProfile(currentSession.user.id).then(profileData => {
+              if (profileData) {
+                setProfile(profileData);
+                if (profileData.preferred_language) {
+                  setLanguage(profileData.preferred_language as Language);
+                }
+              }
+            });
+            
+            fetchTrips(currentSession.user.id).then(({ active, completed }) => {
+              setActiveTrip(active);
+              setCompletedTrips(completed);
+            });
+          }, 0);
+          
+          setCurrentScreen('dashboard');
+        } else {
+          setProfile(null);
+          setActiveTrip(null);
+          setCompletedTrips([]);
+          setCurrentScreen('onboarding');
+        }
+        
+        setIsLoading(false);
+      }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      if (existingSession?.user) {
+        setSession(existingSession);
+        setUser(existingSession.user);
+        setIsAuthenticated(true);
+        
+        fetchProfile(existingSession.user.id).then(profileData => {
+          if (profileData) {
+            setProfile(profileData);
+            if (profileData.preferred_language) {
+              setLanguage(profileData.preferred_language as Language);
+            }
+          }
+        });
+        
+        fetchTrips(existingSession.user.id).then(({ active, completed }) => {
+          setActiveTrip(active);
+          setCompletedTrips(completed);
+        });
+        
+        setCurrentScreen('dashboard');
+      }
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const signInWithEmail = async (email: string, password: string): Promise<{ needsRegistration?: boolean; error?: string }> => {
-    // Demo user login
-    if ((email.toLowerCase() === 'bhargava' || email.toLowerCase() === 'bhargavaanand2006@gmail.com') && password === 'bhargava@12') {
-      setIsDemo(true);
-      setProfile(DEMO_PROFILE);
-      setActiveTrip(DEMO_ACTIVE_TRIP);
-      setCompletedTrips(DEMO_COMPLETED_TRIPS);
-      setIsAuthenticated(true);
-      setCurrentScreen('dashboard');
-      return {};
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        // Check if user needs to register
+        if (error.message.includes('Invalid login credentials')) {
+          setPendingEmail(email);
+          return { needsRegistration: true };
+        }
+        return { error: error.message };
+      }
+
+      if (data.user) {
+        setIsDemo(false);
+        return {};
+      }
+
+      return { error: 'Login failed' };
+    } catch (err) {
+      console.error('Sign in error:', err);
+      return { error: 'An unexpected error occurred' };
     }
-    
-    // For non-demo users, redirect to registration
-    setPendingEmail(email);
-    return { needsRegistration: true };
   };
 
   const signInWithGoogle = async () => {
-    setCurrentScreen('auth');
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      });
+      
+      if (error) {
+        console.error('Google sign in error:', error);
+      }
+    } catch (err) {
+      console.error('Google sign in error:', err);
+    }
   };
 
   const signInAsGuest = async () => {
-    const guestProfile: Profile = {
-      id: `guest-${Date.now()}`,
-      display_name: `Guest_${Math.floor(Math.random() * 10000)}`,
-      email: null,
-      avatar_url: null,
-      level: 1,
-      tokens: 0,
-      dharma_score: 0,
-      total_trips: 0,
-      total_memories: 0,
-      preferred_language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    setProfile(guestProfile);
-    setIsDemo(false);
-    setIsAuthenticated(true);
-    setActiveTrip(null);
-    setCompletedTrips([]);
-    setCurrentScreen('dashboard');
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously();
+      
+      if (error) {
+        console.error('Guest sign in error:', error);
+        return;
+      }
+
+      if (data.user) {
+        setIsDemo(false);
+        // Profile will be created by the handle_new_user trigger
+      }
+    } catch (err) {
+      console.error('Guest sign in error:', err);
+    }
   };
 
   const registerUser = async (data: RegisterData): Promise<{ success: boolean; error?: string }> => {
-    // Create a new profile
-    const newProfile: Profile = {
-      id: `user-${Date.now()}`,
-      display_name: data.displayName,
-      email: data.email,
-      avatar_url: `/avatar-${data.avatarIndex}.png`,
-      level: 1,
-      tokens: 0,
-      dharma_score: 0,
-      total_trips: 0,
-      total_memories: 0,
-      preferred_language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    setProfile(newProfile);
-    setIsDemo(false);
-    setIsAuthenticated(true);
-    setPendingEmail('');
-    setCurrentScreen('dashboard');
-    return { success: true };
+    try {
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            display_name: data.displayName,
+          },
+        },
+      });
+
+      if (error) {
+        if (error.message.includes('already registered')) {
+          return { success: false, error: 'This email is already registered. Please sign in instead.' };
+        }
+        return { success: false, error: error.message };
+      }
+
+      if (authData.user) {
+        // Update avatar if needed
+        if (data.avatarIndex >= 0) {
+          setTimeout(async () => {
+            await supabase
+              .from('profiles')
+              .update({ avatar_url: `/avatar-${data.avatarIndex}.png` })
+              .eq('id', authData.user!.id);
+          }, 1000); // Wait for trigger to create profile
+        }
+        
+        setIsDemo(false);
+        setPendingEmail('');
+        return { success: true };
+      }
+
+      return { success: false, error: 'Registration failed' };
+    } catch (err) {
+      console.error('Registration error:', err);
+      return { success: false, error: 'An unexpected error occurred' };
+    }
   };
 
   const signOut = async () => {
-    setProfile(null);
-    setIsDemo(false);
-    setIsAuthenticated(false);
-    setActiveTrip(null);
-    setCompletedTrips([]);
-    setPendingEmail('');
-    setCurrentScreen('onboarding');
+    try {
+      await supabase.auth.signOut();
+      setProfile(null);
+      setIsDemo(false);
+      setIsAuthenticated(false);
+      setActiveTrip(null);
+      setCompletedTrips([]);
+      setPendingEmail('');
+      setUser(null);
+      setSession(null);
+      setCurrentScreen('onboarding');
+    } catch (err) {
+      console.error('Sign out error:', err);
+    }
   };
 
-  const startNewTrip = (duration: number, destinations: string[]) => {
-    const newTrip: Trip = {
-      id: Date.now().toString(),
-      title: 'Tamil Nadu Adventure',
-      duration,
-      destinations,
-      currentLevel: 1,
-      totalLevels: destinations.length * 2,
-      startDate: new Date(),
-      isCompleted: false,
-      tokensEarned: 0,
-      dharmaEarned: 0,
-      memories: [],
-    };
-    setActiveTrip(newTrip);
-    setCurrentScreen('map');
+  const startNewTrip = async (duration: number, destinations: string[]) => {
+    if (!user) {
+      // Fallback to local-only trip for demo
+      const newTrip: Trip = {
+        id: Date.now().toString(),
+        title: 'Tamil Nadu Adventure',
+        duration,
+        destinations,
+        currentLevel: 1,
+        totalLevels: destinations.length * 2,
+        startDate: new Date(),
+        isCompleted: false,
+        tokensEarned: 0,
+        dharmaEarned: 0,
+        memories: [],
+      };
+      setActiveTrip(newTrip);
+      setCurrentScreen('map');
+      return;
+    }
+
+    try {
+      const { data: trip, error } = await supabase
+        .from('trips')
+        .insert({
+          user_id: user.id,
+          title: 'Tamil Nadu Adventure',
+          duration,
+          status: 'active',
+          current_level: 1,
+          total_levels: destinations.length * 2,
+          start_date: new Date().toISOString().split('T')[0],
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating trip:', error);
+        return;
+      }
+
+      const newTrip: Trip = {
+        id: trip.id,
+        title: trip.title || 'Tamil Nadu Adventure',
+        duration: trip.duration,
+        destinations,
+        currentLevel: trip.current_level || 1,
+        totalLevels: trip.total_levels || 1,
+        startDate: new Date(trip.start_date || Date.now()),
+        isCompleted: false,
+        tokensEarned: 0,
+        dharmaEarned: 0,
+        memories: [],
+      };
+
+      setActiveTrip(newTrip);
+      setCurrentScreen('map');
+    } catch (err) {
+      console.error('Error starting trip:', err);
+    }
   };
 
-  const cancelTrip = () => {
+  const cancelTrip = async () => {
+    if (activeTrip && user) {
+      try {
+        await supabase
+          .from('trips')
+          .update({ status: 'cancelled' })
+          .eq('id', activeTrip.id)
+          .eq('user_id', user.id);
+      } catch (err) {
+        console.error('Error cancelling trip:', err);
+      }
+    }
     setActiveTrip(null);
     setCurrentScreen('tripPlanning');
   };
 
-  const completeTrip = () => {
-    if (activeTrip) {
-      const completed: Trip = {
-        ...activeTrip,
-        isCompleted: true,
-        endDate: new Date(),
-      };
-      setCompletedTrips((prev) => [completed, ...prev]);
-      setActiveTrip(null);
-      setCurrentScreen('dashboard');
+  const completeTrip = async () => {
+    if (!activeTrip) return;
+
+    if (user) {
+      try {
+        await supabase
+          .from('trips')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            end_date: new Date().toISOString().split('T')[0],
+          })
+          .eq('id', activeTrip.id)
+          .eq('user_id', user.id);
+      } catch (err) {
+        console.error('Error completing trip:', err);
+      }
     }
+
+    const completed: Trip = {
+      ...activeTrip,
+      isCompleted: true,
+      endDate: new Date(),
+    };
+    setCompletedTrips((prev) => [completed, ...prev]);
+    setActiveTrip(null);
+    setCurrentScreen('dashboard');
   };
 
   const resumeTrip = () => {
@@ -292,8 +471,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   return (
     <AppContext.Provider
       value={{
-        user: null,
-        session: null,
+        user,
+        session,
         profile,
         isDemo,
         isLoading,
@@ -502,8 +681,8 @@ export const translations: Record<Language, Record<string, string>> = {
     selectDestinations: 'Wählen Sie Ihre Ziele',
     welcomeBack: 'Willkommen Zurück',
     yourStats: 'Ihre Statistiken',
-    civicKarma: 'Bürger Karma',
-    totalTokens: 'Gesamt Token',
-    tripsCompleted: 'Reisen Abgeschlossen',
+    civicKarma: 'Bürger-Karma',
+    totalTokens: 'Gesamt-Token',
+    tripsCompleted: 'Abgeschlossene Reisen',
   },
 };
