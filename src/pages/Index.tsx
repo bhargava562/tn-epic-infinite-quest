@@ -1,6 +1,9 @@
 import React from 'react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import { OnboardingScreen } from '@/screens/OnboardingScreen';
+import { AuthScreen } from '@/screens/AuthScreen';
+import { RegisterScreen } from '@/screens/RegisterScreen';
+import { DashboardScreen } from '@/screens/DashboardScreen';
 import { LobbyScreen } from '@/screens/LobbyScreen';
 import { TripPlanningScreen } from '@/screens/TripPlanningScreen';
 import { MapScreen } from '@/screens/MapScreen';
@@ -14,6 +17,12 @@ const AppContent: React.FC = () => {
     switch (currentScreen) {
       case 'onboarding':
         return <OnboardingScreen />;
+      case 'auth':
+        return <AuthScreen />;
+      case 'register':
+        return <RegisterScreen />;
+      case 'dashboard':
+        return <DashboardScreen />;
       case 'lobby':
         return <LobbyScreen />;
       case 'tripPlanning':
