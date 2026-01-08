@@ -82,7 +82,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const DEMO_PROFILE: Profile = {
   id: 'demo-bhargava-001',
   display_name: 'Bhargava',
-  email: 'bhargava@tnepic.com',
+  email: 'bhargavaanand2006@gmail.com',
   avatar_url: '/avatar-explorer.png',
   level: 5,
   tokens: 1250,
@@ -171,7 +171,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const signInWithEmail = async (email: string, password: string): Promise<{ needsRegistration?: boolean; error?: string }> => {
     // Demo user login
-    if ((email.toLowerCase() === 'bhargava' || email.toLowerCase() === 'bhargava@tnepic.com') && password === 'bhargava') {
+    if ((email.toLowerCase() === 'bhargava' || email.toLowerCase() === 'bhargavaanand2006@gmail.com') && password === 'bhargava@12') {
       setIsDemo(true);
       setProfile(DEMO_PROFILE);
       setActiveTrip(DEMO_ACTIVE_TRIP);
