@@ -1,100 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import type { User, Session } from '@supabase/supabase-js';
-import type { Database } from '@/integrations/supabase/types';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 type Language = 'en' | 'ta' | 'fr' | 'de';
 type ScreenType = 'onboarding' | 'auth' | 'register' | 'dashboard' | 'lobby' | 'tripPlanning' | 'map' | 'ar' | 'completedTrips';
-
-type Profile = Database['public']['Tables']['profiles']['Row'];
-type DbTrip = Database['public']['Tables']['trips']['Row'];
-
-// Demo user Bhargava data
-const BHARGAVA_EMAIL = 'bhargava@tnepic.com';
-const BHARGAVA_PASSWORD = 'bhargava';
-
-const DEMO_PROFILE: Profile = {
-  id: 'demo-bhargava-001',
-  display_name: 'Bhargava',
-  email: BHARGAVA_EMAIL,
-  avatar_url: '/avatar-explorer.png',
-  level: 5,
-  tokens: 1250,
-  dharma_score: 340,
-  total_trips: 4,
-  total_memories: 12,
-  preferred_language: 'en',
-  created_at: '2025-12-01T00:00:00Z',
-  updated_at: '2025-12-28T00:00:00Z',
-};
-
-const DEMO_ACTIVE_TRIP: DbTrip = {
-  id: 'demo-trip-001',
-  user_id: 'demo-bhargava-001',
-  title: 'Thanjavur Heritage Journey',
-  duration: 3,
-  status: 'active',
-  current_level: 2,
-  total_levels: 6,
-  start_date: '2025-12-26',
-  end_date: null,
-  completed_at: null,
-  tokens_earned: 45,
-  dharma_earned: 25,
-  created_at: '2025-12-26T08:00:00Z',
-  updated_at: '2025-12-28T00:00:00Z',
-};
-
-const DEMO_COMPLETED_TRIPS: DbTrip[] = [
-  {
-    id: 'demo-trip-002',
-    user_id: 'demo-bhargava-001',
-    title: 'Madurai Temple Trail',
-    duration: 2,
-    status: 'completed',
-    current_level: 4,
-    total_levels: 4,
-    start_date: '2025-12-20',
-    end_date: '2025-12-21',
-    completed_at: '2025-12-21T18:30:00Z',
-    tokens_earned: 180,
-    dharma_earned: 95,
-    created_at: '2025-12-20T08:00:00Z',
-    updated_at: '2025-12-21T18:30:00Z',
-  },
-  {
-    id: 'demo-trip-003',
-    user_id: 'demo-bhargava-001',
-    title: 'Mahabalipuram Discovery',
-    duration: 1,
-    status: 'completed',
-    current_level: 2,
-    total_levels: 2,
-    start_date: '2025-12-15',
-    end_date: '2025-12-15',
-    completed_at: '2025-12-15T16:00:00Z',
-    tokens_earned: 120,
-    dharma_earned: 60,
-    created_at: '2025-12-15T08:00:00Z',
-    updated_at: '2025-12-15T16:00:00Z',
-  },
-  {
-    id: 'demo-trip-004',
-    user_id: 'demo-bhargava-001',
-    title: 'Kanyakumari Coastal Quest',
-    duration: 2,
-    status: 'completed',
-    current_level: 3,
-    total_levels: 3,
-    start_date: '2025-12-10',
-    end_date: '2025-12-11',
-    completed_at: '2025-12-11T17:00:00Z',
-    tokens_earned: 150,
-    dharma_earned: 80,
-    created_at: '2025-12-10T08:00:00Z',
-    updated_at: '2025-12-11T17:00:00Z',
-  },
-];
 
 interface Memory {
   id: string;
@@ -118,6 +25,21 @@ interface Trip {
   memories: Memory[];
 }
 
+interface Profile {
+  id: string;
+  display_name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  level: number | null;
+  tokens: number | null;
+  dharma_score: number | null;
+  total_trips: number | null;
+  total_memories: number | null;
+  preferred_language: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 interface RegisterData {
   email: string;
   password: string;
@@ -127,33 +49,22 @@ interface RegisterData {
 }
 
 interface AppContextType {
-  // Auth state
-  user: User | null;
-  session: Session | null;
+  user: null;
+  session: null;
   profile: Profile | null;
   isDemo: boolean;
   isLoading: boolean;
   pendingEmail: string;
-  
-  // Language
   language: Language;
   setLanguage: (lang: Language) => void;
-  
-  // Legacy auth state
   isAuthenticated: boolean;
   setIsAuthenticated: (auth: boolean) => void;
-  
-  // Trips
   activeTrip: Trip | null;
   setActiveTrip: (trip: Trip | null) => void;
   completedTrips: Trip[];
   setCompletedTrips: (trips: Trip[]) => void;
-  
-  // Navigation
   currentScreen: ScreenType;
   setCurrentScreen: (screen: ScreenType) => void;
-  
-  // Actions
   signInWithEmail: (email: string, password: string) => Promise<{ needsRegistration?: boolean; error?: string }>;
   signInWithGoogle: () => Promise<void>;
   signInAsGuest: () => Promise<void>;
@@ -167,235 +78,166 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Convert DB trip to local Trip format with demo memories
-const dbTripToTrip = (dbTrip: DbTrip, includeMemories: boolean = false): Trip => {
-  const demoMemories: Memory[] = includeMemories ? [
-    { id: '1', image: 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=200', location: 'Temple Entrance', timestamp: new Date() },
-    { id: '2', image: 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=200', location: 'Inner Sanctum', timestamp: new Date() },
-    { id: '3', image: 'https://images.unsplash.com/photo-1548013146-72479768bada?w=200', location: 'Garden View', timestamp: new Date() },
-  ] : [];
+// Demo profile
+const DEMO_PROFILE: Profile = {
+  id: 'demo-bhargava-001',
+  display_name: 'Bhargava',
+  email: 'bhargava@tnepic.com',
+  avatar_url: '/avatar-explorer.png',
+  level: 5,
+  tokens: 1250,
+  dharma_score: 340,
+  total_trips: 4,
+  total_memories: 12,
+  preferred_language: 'en',
+  created_at: '2025-12-01T00:00:00Z',
+  updated_at: '2025-12-28T00:00:00Z',
+};
 
-  return {
-    id: dbTrip.id,
-    title: dbTrip.title || 'Untitled Trip',
-    duration: dbTrip.duration,
-    destinations: ['Thanjavur', 'Brihadeeswara Temple', 'Art Gallery'],
-    currentLevel: dbTrip.current_level || 1,
-    totalLevels: dbTrip.total_levels || 1,
-    startDate: new Date(dbTrip.start_date || dbTrip.created_at || new Date()),
-    endDate: dbTrip.end_date ? new Date(dbTrip.end_date) : undefined,
-    isCompleted: dbTrip.status === 'completed',
-    tokensEarned: dbTrip.tokens_earned || 0,
-    dharmaEarned: dbTrip.dharma_earned || 0,
-    memories: demoMemories,
-  };
+// Demo completed trips
+const DEMO_COMPLETED_TRIPS: Trip[] = [
+  {
+    id: 'demo-trip-002',
+    title: 'Madurai Temple Trail',
+    duration: 2,
+    destinations: ['Meenakshi Temple', 'Thirumalai Nayakkar Palace'],
+    currentLevel: 4,
+    totalLevels: 4,
+    startDate: new Date('2025-12-20'),
+    endDate: new Date('2025-12-21'),
+    isCompleted: true,
+    tokensEarned: 180,
+    dharmaEarned: 95,
+    memories: [
+      { id: '1', image: 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=200', location: 'Temple Entrance', timestamp: new Date() },
+      { id: '2', image: 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=200', location: 'Inner Sanctum', timestamp: new Date() },
+    ],
+  },
+  {
+    id: 'demo-trip-003',
+    title: 'Mahabalipuram Discovery',
+    duration: 1,
+    destinations: ['Shore Temple', 'Five Rathas'],
+    currentLevel: 2,
+    totalLevels: 2,
+    startDate: new Date('2025-12-15'),
+    endDate: new Date('2025-12-15'),
+    isCompleted: true,
+    tokensEarned: 120,
+    dharmaEarned: 60,
+    memories: [],
+  },
+  {
+    id: 'demo-trip-004',
+    title: 'Kanyakumari Coastal Quest',
+    duration: 2,
+    destinations: ['Vivekananda Rock', 'Thiruvalluvar Statue'],
+    currentLevel: 3,
+    totalLevels: 3,
+    startDate: new Date('2025-12-10'),
+    endDate: new Date('2025-12-11'),
+    isCompleted: true,
+    tokensEarned: 150,
+    dharmaEarned: 80,
+    memories: [],
+  },
+];
+
+// Demo active trip
+const DEMO_ACTIVE_TRIP: Trip = {
+  id: 'demo-trip-001',
+  title: 'Thanjavur Heritage Journey',
+  duration: 3,
+  destinations: ['Brihadeeswara Temple', 'Art Gallery', 'Palace'],
+  currentLevel: 2,
+  totalLevels: 6,
+  startDate: new Date('2025-12-26'),
+  isCompleted: false,
+  tokensEarned: 45,
+  dharmaEarned: 25,
+  memories: [],
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>('en');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('onboarding');
-  
-  // Auth state
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isDemo, setIsDemo] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading] = useState(false);
   const [pendingEmail, setPendingEmail] = useState('');
-  
-  // Trip state
   const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
   const [completedTrips, setCompletedTrips] = useState<Trip[]>([]);
 
-  // Sign in with email/password
   const signInWithEmail = async (email: string, password: string): Promise<{ needsRegistration?: boolean; error?: string }> => {
-    // Check for demo user Bhargava
-    if ((email.toLowerCase() === 'bhargava' || email.toLowerCase() === BHARGAVA_EMAIL) && password === BHARGAVA_PASSWORD) {
+    // Demo user login
+    if ((email.toLowerCase() === 'bhargava' || email.toLowerCase() === 'bhargava@tnepic.com') && password === 'bhargava') {
       setIsDemo(true);
       setProfile(DEMO_PROFILE);
-      setActiveTrip(dbTripToTrip(DEMO_ACTIVE_TRIP));
-      setCompletedTrips(DEMO_COMPLETED_TRIPS.map(t => dbTripToTrip(t, true)));
+      setActiveTrip(DEMO_ACTIVE_TRIP);
+      setCompletedTrips(DEMO_COMPLETED_TRIPS);
       setIsAuthenticated(true);
       setCurrentScreen('dashboard');
-      return { needsRegistration: false };
-    }
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        if (error.message.includes('Invalid login credentials')) {
-          setPendingEmail(email);
-          return { needsRegistration: true };
-        }
-        return { error: error.message };
-      }
-
-      if (data.user) {
-        setUser(data.user);
-        setSession(data.session);
-        
-        // Fetch profile
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .maybeSingle();
-        
-        if (profileData) {
-          setProfile(profileData);
-        }
-        
-        setIsDemo(false);
-        setIsAuthenticated(true);
-        setCurrentScreen('dashboard');
-      }
-
       return {};
-    } catch (err) {
-      return { error: 'Login failed. Please try again.' };
     }
+    
+    // For non-demo users, redirect to registration
+    setPendingEmail(email);
+    return { needsRegistration: true };
   };
 
-  // Sign in with Google (redirects to auth for now)
   const signInWithGoogle = async () => {
     setCurrentScreen('auth');
   };
 
-  // Sign in as Guest
   const signInAsGuest = async () => {
-    try {
-      const { data, error } = await supabase.auth.signInAnonymously();
-      
-      if (error) {
-        const guestProfile: Profile = {
-          id: `guest-${Date.now()}`,
-          display_name: `Guest_${Math.floor(Math.random() * 10000)}`,
-          email: null,
-          avatar_url: null,
-          level: 1,
-          tokens: 0,
-          dharma_score: 0,
-          total_trips: 0,
-          total_memories: 0,
-          preferred_language: 'en',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        setProfile(guestProfile);
-        setIsDemo(false);
-        setIsAuthenticated(true);
-        setActiveTrip(null);
-        setCompletedTrips([]);
-        setCurrentScreen('dashboard');
-        return;
-      }
-
-      if (data.user) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .maybeSingle();
-        
-        setUser(data.user);
-        setSession(data.session);
-        setProfile(profileData);
-        setIsDemo(false);
-        setIsAuthenticated(true);
-        setActiveTrip(null);
-        setCompletedTrips([]);
-        setCurrentScreen('dashboard');
-      }
-    } catch (err) {
-      console.warn('Guest sign in encountered an issue');
-    }
+    const guestProfile: Profile = {
+      id: `guest-${Date.now()}`,
+      display_name: `Guest_${Math.floor(Math.random() * 10000)}`,
+      email: null,
+      avatar_url: null,
+      level: 1,
+      tokens: 0,
+      dharma_score: 0,
+      total_trips: 0,
+      total_memories: 0,
+      preferred_language: 'en',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setProfile(guestProfile);
+    setIsDemo(false);
+    setIsAuthenticated(true);
+    setActiveTrip(null);
+    setCompletedTrips([]);
+    setCurrentScreen('dashboard');
   };
 
-  // Register new user
   const registerUser = async (data: RegisterData): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const redirectUrl = `${window.location.origin}/`;
-      
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            display_name: data.displayName,
-          }
-        }
-      });
-
-      if (authError) {
-        if (authError.message.includes('already registered')) {
-          return { success: false, error: 'This email is already registered. Please sign in.' };
-        }
-        return { success: false, error: authError.message };
-      }
-
-      if (authData.user) {
-        // Wait for profile trigger
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Update profile with additional data
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({
-            display_name: data.displayName,
-            avatar_url: `/avatar-${data.avatarIndex}.png`,
-          })
-          .eq('id', authData.user.id);
-
-        // Fetch updated profile
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', authData.user.id)
-          .maybeSingle();
-
-        setUser(authData.user);
-        setSession(authData.session);
-        setProfile(profileData || {
-          id: authData.user.id,
-          display_name: data.displayName,
-          email: data.email,
-          avatar_url: `/avatar-${data.avatarIndex}.png`,
-          level: 1,
-          tokens: 0,
-          dharma_score: 0,
-          total_trips: 0,
-          total_memories: 0,
-          preferred_language: 'en',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-        setIsDemo(false);
-        setIsAuthenticated(true);
-        setPendingEmail('');
-        setCurrentScreen('dashboard');
-
-        return { success: true };
-      }
-
-      return { success: false, error: 'Registration failed' };
-    } catch (err) {
-      return { success: false, error: 'Registration failed. Please try again.' };
-    }
+    // Create a new profile
+    const newProfile: Profile = {
+      id: `user-${Date.now()}`,
+      display_name: data.displayName,
+      email: data.email,
+      avatar_url: `/avatar-${data.avatarIndex}.png`,
+      level: 1,
+      tokens: 0,
+      dharma_score: 0,
+      total_trips: 0,
+      total_memories: 0,
+      preferred_language: 'en',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setProfile(newProfile);
+    setIsDemo(false);
+    setIsAuthenticated(true);
+    setPendingEmail('');
+    setCurrentScreen('dashboard');
+    return { success: true };
   };
 
-  // Sign out
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
     setProfile(null);
     setIsDemo(false);
     setIsAuthenticated(false);
@@ -447,48 +289,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  // Initialize auth state
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user && !isDemo) {
-          setTimeout(() => {
-            supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .maybeSingle()
-              .then(({ data }) => {
-                if (data) {
-                  setProfile(data);
-                  setIsAuthenticated(true);
-                  if (currentScreen === 'onboarding' || currentScreen === 'auth' || currentScreen === 'register') {
-                    setCurrentScreen('dashboard');
-                  }
-                }
-              });
-          }, 0);
-        }
-      }
-    );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [isDemo]);
-
   return (
     <AppContext.Provider
       value={{
-        user,
-        session,
+        user: null,
+        session: null,
         profile,
         isDemo,
         isLoading,

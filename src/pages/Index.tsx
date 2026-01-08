@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppProvider, useApp } from '@/contexts/AppContext';
+import { AppProvider, useApp, translations } from '@/contexts/AppContext';
 import { OnboardingScreen } from '@/screens/OnboardingScreen';
 import { AuthScreen } from '@/screens/AuthScreen';
 import { RegisterScreen } from '@/screens/RegisterScreen';
@@ -40,7 +40,6 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full max-w-md mx-auto overflow-hidden relative">
-      {/* Mobile container with max-width for desktop preview */}
       <div className="min-h-screen">
         {renderScreen()}
       </div>
