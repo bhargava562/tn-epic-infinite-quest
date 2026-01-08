@@ -8,14 +8,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { User, Mail, Lock, ArrowLeft, Check } from 'lucide-react';
 
-const AVATARS = [
-  { id: 'explorer', src: '/avatar-explorer.png', name: 'Explorer' },
-  { id: 'pilgrim', src: '/avatar-pilgrim.png', name: 'Pilgrim' },
-  { id: 'historian', src: '/avatar-historian.png', name: 'Historian' },
-  { id: 'artist', src: '/avatar-artist.png', name: 'Artist' },
-];
-
-// Use a default avatar color since images might not exist
 const DEFAULT_AVATAR_COLORS = [
   'bg-gold',
   'bg-royal',
@@ -128,7 +120,7 @@ export const RegisterScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* Registration Form */}
+          {/* Registration Form - Only email and password fields, no social buttons */}
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name" className="text-muted-foreground">Display Name</Label>
@@ -195,7 +187,7 @@ export const RegisterScreen: React.FC = () => {
               className="w-full mt-6"
               disabled={isLoading}
             >
-              {isLoading ? 'Creating Account...' : 'Create Account'}
+              {isLoading ? 'Creating Account...' : 'Sign Up'}
             </Button>
           </form>
 
