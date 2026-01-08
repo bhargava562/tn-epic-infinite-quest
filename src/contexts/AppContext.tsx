@@ -83,7 +83,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>('en');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentScreen, setCurrentScreen] = useState<ScreenType>('onboarding');
+  const [currentScreen, setCurrentScreen] = useState<ScreenType>('auth');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -166,51 +166,88 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Initialize auth state
   useEffect(() => {
+    // If true, the app will ALWAYS start at the login screen and require the user
+    // to log in again (no automatic session restore to dashboard).
+    const FORCE_LOGIN_EACH_LAUNCH = true;
+    let forcedSignOutRequested = false;
+
     // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, currentSession) => {
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
-        setIsAuthenticated(!!currentSession?.user);
-        
-        if (currentSession?.user) {
-          // Defer database calls with setTimeout to prevent deadlock
-          setTimeout(() => {
-            fetchProfile(currentSession.user.id).then(profileData => {
-              if (profileData) {
-                setProfile(profileData);
-                if (profileData.preferred_language) {
-                  setLanguage(profileData.preferred_language as Language);
-                }
-              }
-            });
-            
-            fetchTrips(currentSession.user.id).then(({ active, completed }) => {
-              setActiveTrip(active);
-              setCompletedTrips(completed);
-            });
-          }, 0);
-          
-          setCurrentScreen('dashboard');
-        } else {
-          setProfile(null);
-          setActiveTrip(null);
-          setCompletedTrips([]);
-          setCurrentScreen('onboarding');
-        }
-        
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      // When forcing login on each launch, any restored session (including anonymous/guest)
+      // should be cleared immediately.
+      if (FORCE_LOGIN_EACH_LAUNCH && currentSession?.user && !forcedSignOutRequested) {
+        forcedSignOutRequested = true;
+
+        // Show login immediately to avoid flashing the dashboard.
+        setSession(null);
+        setUser(null);
+        setIsAuthenticated(false);
+        setProfile(null);
+        setActiveTrip(null);
+        setCompletedTrips([]);
+        setCurrentScreen('auth');
         setIsLoading(false);
+
+        // Defer signOut to avoid calling backend methods directly inside the auth callback.
+        setTimeout(() => {
+          supabase.auth.signOut();
+        }, 0);
+
+        return;
       }
-    );
+
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+      setIsAuthenticated(!!currentSession?.user);
+
+      if (currentSession?.user) {
+        // Defer database calls with setTimeout to prevent deadlock
+        setTimeout(() => {
+          fetchProfile(currentSession.user.id).then((profileData) => {
+            if (profileData) {
+              setProfile(profileData);
+              if (profileData.preferred_language) {
+                setLanguage(profileData.preferred_language as Language);
+              }
+            }
+          });
+
+          fetchTrips(currentSession.user.id).then(({ active, completed }) => {
+            setActiveTrip(active);
+            setCompletedTrips(completed);
+          });
+        }, 0);
+
+        setCurrentScreen('dashboard');
+      } else {
+        setProfile(null);
+        setActiveTrip(null);
+        setCompletedTrips([]);
+        setCurrentScreen('auth');
+      }
+
+      setIsLoading(false);
+    });
 
     // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
-      if (existingSession?.user) {
+      if (FORCE_LOGIN_EACH_LAUNCH && existingSession?.user && !forcedSignOutRequested) {
+        forcedSignOutRequested = true;
+        setTimeout(() => {
+          supabase.auth.signOut();
+        }, 0);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!FORCE_LOGIN_EACH_LAUNCH && existingSession?.user) {
         setSession(existingSession);
         setUser(existingSession.user);
         setIsAuthenticated(true);
-        
-        fetchProfile(existingSession.user.id).then(profileData => {
+
+        fetchProfile(existingSession.user.id).then((profileData) => {
           if (profileData) {
             setProfile(profileData);
             if (profileData.preferred_language) {
@@ -218,12 +255,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
           }
         });
-        
+
         fetchTrips(existingSession.user.id).then(({ active, completed }) => {
           setActiveTrip(active);
           setCompletedTrips(completed);
         });
-        
+
         setCurrentScreen('dashboard');
       }
       setIsLoading(false);
@@ -349,7 +386,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setPendingEmail('');
       setUser(null);
       setSession(null);
-      setCurrentScreen('onboarding');
+      setCurrentScreen('auth');
     } catch (err) {
       console.error('Sign out error:', err);
     }

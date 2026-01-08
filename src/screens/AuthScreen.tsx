@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from 'lucide-react';
 
 export const AuthScreen: React.FC = () => {
-  const { language, signInWithEmail, setCurrentScreen } = useApp();
+  const { language, signInWithEmail, signInWithGoogle, setCurrentScreen } = useApp();
   const t = translations[language];
 
   const [email, setEmail] = useState('');
@@ -19,7 +19,7 @@ export const AuthScreen: React.FC = () => {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast.error('Please enter email and password');
       return;
@@ -41,9 +41,13 @@ export const AuthScreen: React.FC = () => {
     }
   };
 
-  const handleSocialLogin = (provider: 'google' | 'instagram') => {
-    // Navigate to register screen - the register screen will show email/password only
-    setCurrentScreen('register');
+  const handleSocialLogin = async (provider: 'google' | 'instagram') => {
+    if (provider === 'google') {
+      await signInWithGoogle();
+      return;
+    }
+
+    toast.info('Instagram login is not available yet.');
   };
 
   return (
@@ -148,7 +152,8 @@ export const AuthScreen: React.FC = () => {
               <Button
                 variant="social"
                 size="lg"
-                className="w-full gap-3"
+                className="w-full gap-3 opacity-50 cursor-not-allowed"
+                disabled
                 onClick={() => handleSocialLogin('instagram')}
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="url(#instagramGradientAuth)">
