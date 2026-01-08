@@ -32,13 +32,13 @@
     --popover: 232 50% 10%;
     --popover-foreground: 0 0% 98%;
     
-    --primary: var(--royal-indigo);
+    --primary: 232 67% 30%;
     --primary-foreground: 0 0% 100%;
     
     --secondary: 232 40% 20%;
     --secondary-foreground: 0 0% 98%;
     
-    --accent: var(--temple-gold);
+    --accent: 45 100% 51%;
     --accent-foreground: 232 70% 10%;
     
     --muted: 232 30% 18%;
@@ -49,7 +49,7 @@
     
     --border: 232 40% 25%;
     --input: 232 40% 20%;
-    --ring: var(--temple-gold);
+    --ring: 45 100% 51%;
     
     --radius: 1rem;
     
