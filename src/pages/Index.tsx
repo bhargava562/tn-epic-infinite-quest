@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppProvider, useApp, translations } from '@/contexts/AppContext';
+import { AppProvider, useApp } from '@/contexts/AppContext';
 import { OnboardingScreen } from '@/screens/OnboardingScreen';
 import { AuthScreen } from '@/screens/AuthScreen';
 import { RegisterScreen } from '@/screens/RegisterScreen';
@@ -47,7 +47,7 @@ const AppContent: React.FC = () => {
   );
 };
 
-const Index = () => {
+const Index: React.FC = () => {
   return (
     <AppProvider>
       <AppContent />
